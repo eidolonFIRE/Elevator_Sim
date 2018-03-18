@@ -1,7 +1,10 @@
-from building import Building_traditional
 import sys
 from time import time
+import copy
+from multiprocessing import Pool
 
+from building import Building_traditional, Building_destination
+import peep
 
 
 reps = 1
@@ -9,6 +12,7 @@ elevators = 1
 floors = 2
 peeps = 10
 elevCapacity = 8
+build = "traditional"
 
 
 for idx, txt in enumerate(sys.argv):
@@ -27,6 +31,9 @@ for idx, txt in enumerate(sys.argv):
 	elif "-p" in txt:
 		peeps = int(sys.argv[idx+1])
 
+	elif "-dest" in txt:
+		build = "dest"
+
 	elif "-h" in txt:
 		print("\
 	r: runs to average\n\
@@ -41,25 +48,46 @@ for idx, txt in enumerate(sys.argv):
 
 
 
-data = []
 
-def Single(reps, floors, elevators, peeps, elevCapacity):
-	for x in range(reps):
-		myTestBuilding = Building_traditional(floors=floors, elevators=elevators, people={"A":peeps//2, "B":peeps-(peeps//2)}, elevCapacity=elevCapacity)
-		myTestBuilding.run(verbose = False)
-	return myTestBuilding.calcAvg() / reps
+def run(floors):
+	global elevators
+	global peeps 
+	global elevCapacity
+	global reps
+	global build
+
+
+	flrData = [0]*elevators
+	ppsAdj = peeps * floors
+	for r in range(reps):
+		peepsQ = peep.buildQueue({"A": ppsAdj//2, "B": ppsAdj-(ppsAdj//2)}, floors)
+		for elevs in range(1,elevators+1):
+			if "trad" in build:
+				myTestBuilding = Building_traditional(floors=floors, elevators=elevs, people=copy.deepcopy(peepsQ), elevCapacity=elevCapacity)
+			elif "dest" in build:
+				myTestBuilding = Building_destination(floors=floors, elevators=elevs, people=copy.deepcopy(peepsQ), elevCapacity=elevCapacity)
+			myTestBuilding.run(verbose = False)
+			flrData[elevs-1] += myTestBuilding.calcAvg() / elevs
+	return map(lambda x: x/reps, flrData)
+	
+	 
+
+
+# run all the workers
 
 
 start = time()
-
-print "floors, " + ",".join(["%delevs"%x for x in range(1,elevators+1)])
-for flr in range(2, floors+1):
-	data = []
-	for elevs in range(1,elevators+1):
-		# sys.stdout.write("%d/%d  \r"%(elevs-1,elevators-2))
-		data.append(Single(reps,flr,elevs,peeps,elevCapacity))
-	print "%d,"%flr + ",".join(["%.2f"%x for x in data])
-
+p = Pool()
+data = p.map(run, range(2, floors+1))
 end = time()
 
-print("Elapsed time: %f"%((end-start)/60))
+
+
+
+# print results
+
+print "floors, " + ",".join(["%delevs"%x for x in range(1,elevators+1)])
+for flr, d in enumerate(data):
+	print "%2d, "%(flr+2) + ",".join(["%6.2f"%x for x in d])
+
+print("Elapsed time  %d:%d  "%((end-start)/60,(end-start)%60))

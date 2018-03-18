@@ -1,4 +1,6 @@
-from building import Building_traditional
+from building import Building_traditional, Building_destination
+import peep
+
 import sys
 
 
@@ -10,6 +12,7 @@ floors = 2
 peeps = 10
 elevCapacity = 8
 gif = False
+build = "traditional"
 
 for idx, txt in enumerate(sys.argv):
 	if "-s" in txt:
@@ -39,6 +42,9 @@ for idx, txt in enumerate(sys.argv):
 	elif "-gif" in txt:
 		gif = True
 
+	elif "-dest" in txt:
+		build = "dest"
+
 	elif "-h" in txt:
 		print("\
 	v: verbose (render visuals)\n\
@@ -62,8 +68,14 @@ tot_avg = 0
 tot_elevUtil = 0
 tot_runtime = 0
 
+ppsAdj = peeps * floors
+peepQ = peep.buildQueue({"A": ppsAdj//2, "B": ppsAdj-(ppsAdj//2)}, floors)
+
 for x in range(reps):
-	myTestBuilding = Building_traditional(floors=floors, elevators=elevators, people={"A":peeps//2, "B":peeps-(peeps//2)}, elevCapacity=elevCapacity)
+	if "trad" in build:
+		myTestBuilding = Building_traditional(floors=floors, elevators=elevators, people=peepQ, elevCapacity=elevCapacity)
+	elif "dest" in build:
+		myTestBuilding = Building_destination(floors=floors, elevators=elevators, people=peepQ, elevCapacity=elevCapacity)
 	myTestBuilding.run(verbose=verbose, speed=speed, gif = gif)
 	
 	tot_avg += myTestBuilding.calcAvg()

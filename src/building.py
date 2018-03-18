@@ -17,12 +17,12 @@ class Building_base(object):
 	A collection of elevators.
 	This entity is acting as the elevator controller as well.
 	"""
-	def __init__(self, floors = 2, elevators = 1, people = {"A":1}, elevCapacity = 8):
+	def __init__(self, floors = 2, elevators = 1, people = [], elevCapacity = 8):
 		super(Building_base, self).__init__()
 		self.floors = floors
 		self.elevators = [Elevator(elevCapacity) for x in range(elevators)]
 		self.people = people
-		self.remaining = sum(people.values())
+		self.remaining = len(people)
 		self.starting = self.remaining
 
 		# empty queue for each floor
@@ -38,16 +38,7 @@ class Building_base(object):
 
 
 
-	def DrawNextPeep(self, dist):
-		x = choice("".join([k*v for k,v in dist.items()]))
-		self.people[x] -= 1
-		if x == "A":
-			return PeepA(self.floors)
-		elif x == "B":
-			return PeepB(self.floors)
-		else:
-			assert("Error: unknown peep selected.")
-			return None
+
 
 
 	def PrintState(self):
@@ -67,7 +58,7 @@ class Building_base(object):
 			stdout.write(("^" if self.floorCalls[floor][0] else " ") + ("v" if self.floorCalls[floor][1] else " ") + "|")
 
 			# peeps
-			stdout.write("{:<10} - {:<10} \n".format(
+			stdout.write("{:<10} - {:<10}  \n".format(
 				"".join([str(x.queue[-1][0]) if x.busy <= 0 else "" for x in self.floorQs[floor]]),
 				"".join([str(x.queue[-1][0]) if x.busy > 0 else "" for x in self.floorQs[floor]]),
 				))
@@ -82,7 +73,7 @@ class Building_base(object):
 				stdout.write("   ")
 		stdout.write("                            \n")
 		
-		stdout.write("     People: %3d coming, %3d cur, %3d remain \n"%(sum(self.people.values()), self.remaining - sum(self.people.values()), self.remaining))
+		stdout.write("     People: %3d coming, %3d cur, %3d remain \n"%(len(self.people), self.remaining - len(self.people), self.remaining))
 		stdout.write("  Elev Util: %5.1f %%     (%5.1f %% idle) \n"%(self.calcElevUtil(), self.calcElevIdle()))
 		if self.time_queue_div:
 			avg = float(self.time_queue) / self.time_queue_div
@@ -124,9 +115,10 @@ class Building_base(object):
 			self.time_tot += 1
 
 			# add a person to first floor queue
-			if randint(0, 1000 / self.starting) == 0:
-				if sum(self.people.values()):
-					self.floorQs[0].append(self.DrawNextPeep(self.people))
+			# if randint(0, 1000 / self.starting) == 0:
+			if randint(0, 30 / len(self.elevators)) == 0:
+				if len(self.people):
+					self.floorQs[0].append(self.people.pop())
 					# frameUnique = True
 			
 			for idx, floor in enumerate(self.floorQs):
@@ -165,7 +157,7 @@ class Building_base(object):
 							f, peep.busy = peep.queue.pop()
 							if peep.busy >= 0:
 								self.floorQs[elev.curfloor].append(peep)
-								frameUnique = True
+								# frameUnique = True
 								self.time_trav += peep.time_trav
 								self.time_trav_div += 1
 							else:
@@ -190,19 +182,21 @@ class Building_base(object):
 					# clear call button and this floor from queue
 					# TODO: optimize this
 					if elev.openDoors == 0:
-						idx = 0 if elev.dir == 1 else 1
-						callUp = False
-						callDown = False
-						for peep in self.floorQs[elev.curfloor]:
-							if peep.busy:
-								continue
-							if peep.queue[-1][0] > elev.curfloor:
-								callUp = True
-							if peep.queue[-1][0] < elev.curfloor:
-								callDown = True
-							if callUp and callDown:
-								break
-						self.floorCalls[elev.curfloor] = [callUp, callDown]
+						frameUnique = True
+						if abs(elev.dir):
+							idx = 0 if elev.dir == 1 else 1
+							callUp = False
+							callDown = False
+							for peep in self.floorQs[elev.curfloor]:
+								if peep.busy:
+									continue
+								if peep.queue[-1][0] > elev.curfloor:
+									callUp = True
+								if peep.queue[-1][0] < elev.curfloor:
+									callDown = True
+								if callUp and callDown:
+									break
+							self.floorCalls[elev.curfloor] = [callUp, callDown]
 
 				# deciding next move
 				elif elev.dir == 0:
@@ -215,20 +209,23 @@ class Building_base(object):
 					else:
 						frameUnique = True
 						elev.curfloor += elev.dir
+						# accel elevator
+						elev.speed = max(1, elev.speed - 2)
+						# end of line
 						if elev.curfloor >= self.floors - 1:
 							elev.dir = -1
 						elif elev.curfloor == 0:
 							elev.dir = 1
 						# check if should open
-						if elev.curfloor in elev.queue \
-							or (self.floorCalls[elev.curfloor][0] and elev.dir == 1) \
-							or (self.floorCalls[elev.curfloor][1] and elev.dir == -1):
+						if self.decideElevOpen(elev):
 							elev.openDoors = elev.cost_doors
 							if elev.curfloor in elev.queue:
 								elev.queue.remove(elev.curfloor)
+							# reset elev speed
+							elev.speed = elev.cost_traverse
 						else:
 							if len(elev.queue):
-								elev.traversing = elev.cost_traverse
+								elev.traversing = elev.speed
 							else:
 								elev.dir = 0
 
@@ -255,7 +252,7 @@ class Building_base(object):
 
 #==========================================================
 #
-#    Building
+#    Buildings
 #
 #----------------------------------------------------------
 class Building_traditional(Building_base):
@@ -292,17 +289,29 @@ class Building_traditional(Building_base):
 		else:
 			return False
 
+	def decideElevOpen(self, elev):
+		if elev.curfloor in elev.queue:
+			return True
+		if len(elev.peeps) < elev.capacity and\
+			((self.floorCalls[elev.curfloor][0] and elev.dir == 1) \
+			or (self.floorCalls[elev.curfloor][1] and elev.dir == -1)):
+			return True
+		return False
+
 
 	def elevIdle(self, elev):
 		for idx,x in enumerate(self.floorCalls):
 			if x[0] or x[1]:
 				flagDo = True
-				# don't go if another elevator is already scheduled to stop there
-				# or if another idle elevator is closer
-				for t,others in enumerate(self.elevators):
-					if t == idx:
+				for others in self.elevators:
+					if others == elev:
 						continue
-					if idx in others.queue or ((others.dir is 0 or others.openDoors) and abs(idx - others.curfloor) < abs(idx - elev.curfloor)):
+					# don't go if another elevator is already scheduled to stop there going in that direction
+					if idx in others.queue and ((idx == 0 or idx == self.floors-1) or (x[0] and others.dir==1 or x[1] and others.dir==-1) or len(others.peeps) == 0):
+						flagDo = False
+						break
+					# or if another idle elevator is closer
+					if (others.dir is 0 or others.openDoors) and abs(idx - others.curfloor) < abs(idx - elev.curfloor):
 						flagDo = False
 						break
 
@@ -320,6 +329,169 @@ class Building_traditional(Building_base):
 						elev.openDoors = elev.cost_boarding
 					break
 
+
+
+
+
+
+
+
+
+class Building_destination(Building_base):
+	"""
+	destination elevator type
+	"""
+	def __init__(self, floors, elevators, people, elevCapacity):
+		super(Building_destination, self).__init__(floors, elevators, people, elevCapacity)
+		# [up, down] call buttons activated
+		self.floorCalls = [[False,False] for x in range(floors)]
+
+
+	def peepEntersFloor(self, peep, floor):
+		# Just for show since call buttons aren't used for this elev
+		if peep.queue[-1][0] > floor:
+			# going up
+			self.floorCalls[floor][0] = True
+		else:
+			# going down
+			self.floorCalls[floor][1] = True
+
+
+	def peepEntersElev(self, peep, elev):
+		# push button inside elevator
+		floorRequest = peep.queue[-1][0]
+		if floorRequest not in elev.queue:
+			elev.queue.append(floorRequest)
+
+
+	def decideBoardElev(self, elev, peep):
+		if peep.queue[-1][0] in elev.queue:# or len(elev.queue) == 0:
+			return True
+		else:
+			return False
+
+
+	def decideElevOpen(self, elev):
+		if elev.curfloor in elev.queue:
+			return True
+		if len(elev.peeps) < elev.capacity:
+			for peep in self.floorQs[elev.curfloor]:
+				if peep.busy:
+					continue
+				else:
+					if peep.queue[-1][0] in elev.queue:
+						return True
+		return False
+
+
+	def uniqueFloorCalls(self, floor):
+		retval = []
+		for peep in self.floorQs[floor]:
+			if peep.busy:
+				continue
+			if peep.queue[-1][0] not in retval:
+				retval.append(peep.queue[-1][0])
+		return retval
+
+
+	def allFloorCalls(self, floor):
+		retval = []
+		for peep in self.floorQs[floor]:
+			if peep.busy:
+				continue
+			retval.append(peep.queue[-1][0])
+		return retval
+
+
+	def elevIdle(self, elev):
+		# callsUp = [self.uniqueFloorCalls(x) for x in range(elev.curfloor, self.floors)]
+		# callsDn = [self.uniqueFloorCalls(x) for x in range(0, elev.curfloor + 1)]
+
+		callsUp = [self.allFloorCalls(x) for x in range(elev.curfloor, self.floors)]
+		callsDn = [self.allFloorCalls(x) for x in range(0, elev.curfloor + 1)]
+
+		# up
+		callsCat = {}
+		for i, fl in enumerate(callsUp):
+			for x in fl:
+				if x > elev.curfloor and x > (i + elev.curfloor):
+					if x in callsCat.keys():
+						callsCat[x] += 1
+					else:
+						callsCat[x] = 1
+
+		# down
+		for i, fl in enumerate(callsDn):
+			for x in fl:
+				if x < elev.curfloor and x < i:
+					if x in callsCat.keys():
+						callsCat[x] += 1
+					else:
+						callsCat[x] = 1
+
+		callsPref = sorted(callsCat.keys(), key=callsCat.get, reverse = True)
+
+		if len(callsPref):
+			for call in callsPref:
+				answer = True
+				elevsStopingThere = 0
+				for others in self.elevators:
+					if others == elev:
+						continue
+					if call in others.queue:
+						elevsStopingThere += 1
+				if elevsStopingThere > len(self.uniqueFloorCalls(call)):
+					answer = False
+
+
+				if answer:
+					if call > elev.curfloor:
+						elev.dir = 1
+						elev.queue.append(call)
+					else:
+						elev.dir = -1
+						elev.queue.append(call)
+
+					if call in self.uniqueFloorCalls(elev.curfloor):
+						elev.openDoors = elev.cost_boarding
+					else:
+						elev.traversing = elev.cost_traverse
+
+					break
+
+
+		else:
+			# no good options, just go find a floor
+			for floor in range(self.floors):
+				if len(self.uniqueFloorCalls(floor)):
+					answer = True
+					elevsStopingThere = 0
+					for others in self.elevators:
+						if others == elev:
+							continue
+						# don't go if another elevator is already scheduled to stop there going in that direction
+						if floor in others.queue:# and ((floor == 0 or floor == self.floors-1) or (x[0] and others.dir==1 or x[1] and others.dir==-1) or len(others.peeps) == 0):
+							elevsStopingThere += 1
+						# or if another idle elevator is closer
+						if (others.dir is 0 or others.openDoors) and abs(floor - others.curfloor) < abs(floor - elev.curfloor):
+							elevsStopingThere += 1
+
+					if elevsStopingThere > len(self.uniqueFloorCalls(floor)):
+						answer = False
+
+					if answer:
+						if floor > elev.curfloor:
+							elev.dir = 1
+							elev.traversing = elev.cost_traverse
+							elev.queue.append(floor)
+						elif floor < elev.curfloor:
+							elev.dir = -1
+							elev.traversing = elev.cost_traverse
+							elev.queue.append(floor)
+						else:
+							elev.dir = (1 if x[0] else -1)
+							elev.openDoors = elev.cost_boarding
+						break
 
 
 

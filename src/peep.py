@@ -1,4 +1,4 @@
-from random import randint
+from random import randint, choice
 
 
 
@@ -63,3 +63,16 @@ class PeepB(PeepBase):
 			self.AddRandFloor(time = [50,100])
 		
 				
+
+def buildQueue(dist, floors):
+	retval = []
+	while sum(dist.values()):
+		l = "".join([k*v for k,v in dist.items()])
+		x = choice(l)
+		dist[x] -= 1
+
+		if x == "A":
+			retval.append(PeepA(floors))
+		elif x == "B":
+			retval.append(PeepB(floors))
+	return retval
