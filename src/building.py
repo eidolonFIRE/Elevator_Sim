@@ -36,6 +36,8 @@ class Building_base(object):
 		self.time_tot = 0
 		self.avgRuntime = 0.0
 
+		self.watchdog = 0
+
 
 
 
@@ -113,6 +115,7 @@ class Building_base(object):
 			frameUnique = False
 			start = time()
 			self.time_tot += 1
+			self.watchdog += 1
 
 			# add a person to first floor queue
 			# if randint(0, 1000 / self.starting) == 0:
@@ -232,18 +235,25 @@ class Building_base(object):
 			end = time()
 			self.avgRuntime += (end-start)
 
-			if verbose and frameUnique:
+			if self.watchdog > 1000:
 				self.PrintState()
-				if gif:
-					print("frame: %d"%frame)
-					sleep(0.2)
-					subprocess.Popen(["shutter", "-a", "-e", "-n", "--disable_systray", "--output=renders/render%04d.png"%frame], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-					frame += 1
-					sleep(1)
-				elif speed >= 0:
-					sleep(max(speed - (end-start)*2, 0))
-				else:
-					raw_input()
+				print(" WATCHDOG TIMOUT ")
+				break
+
+			if frameUnique:
+				self.watchdog = 0
+				if verbose:
+					self.PrintState()
+					if gif:
+						print("frame: %d"%frame)
+						sleep(0.2)
+						subprocess.Popen(["shutter", "-a", "-e", "-n", "--disable_systray", "--output=renders/render%04d.png"%frame], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+						frame += 1
+						sleep(1)
+					elif speed >= 0:
+						sleep(max(speed - (end-start)*2, 0))
+					else:
+						raw_input()
 
 
 
@@ -462,7 +472,12 @@ class Building_destination(Building_base):
 
 		else:
 			# no good options, just go find a floor
-			for floor in range(self.floors):
+			# search from busiest to least
+			busyFloors = [(x,(len(self.allFloorCalls(x)))) for x in range(0, self.floors)]
+			busyFloors.sort(key=lambda tup: tup[0])
+
+
+			for floor, weight in busyFloors:
 				if len(self.uniqueFloorCalls(floor)):
 					answer = True
 					elevsStopingThere = 0

@@ -16,14 +16,15 @@ build = "traditional"
 
 for idx, txt in enumerate(sys.argv):
 	if "-s" in txt:
-		if idx == len(sys.argv)-1 or "step" in sys.argv[idx+1] or "-" in sys.argv[idx+1]:
-			speed = -1
-		else:
-			speed = 1.0 / float(sys.argv[idx+1])**2
+		speed = 1.0 / float(sys.argv[idx+1])**2
+		verbose = True
+
+	elif "step" in txt:
+		speed = -1
+		verbose = True
 
 	elif "-v" in txt:
 		verbose = True
-		print(chr(27) + "[2J")
 
 	elif "-r" in txt:
 		reps = int(sys.argv[idx+1])
@@ -41,6 +42,7 @@ for idx, txt in enumerate(sys.argv):
 
 	elif "-gif" in txt:
 		gif = True
+		verbose = True
 
 	elif "-dest" in txt:
 		build = "dest"
@@ -61,7 +63,8 @@ for idx, txt in enumerate(sys.argv):
 	h: print help\n")
 
 
-
+if verbose:
+	print(chr(27) + "[2J")
 
 tot_lobby = 0
 tot_avg = 0
@@ -69,22 +72,22 @@ tot_elevUtil = 0
 tot_runtime = 0
 
 ppsAdj = peeps * floors
-peepQ = peep.buildQueue({"A": ppsAdj//2, "B": ppsAdj-(ppsAdj//2)}, floors)
 
 for x in range(reps):
+	peepQ = peep.buildQueue({"A": ppsAdj//2, "B": ppsAdj-(ppsAdj//2)}, floors)
 	if "trad" in build:
 		myTestBuilding = Building_traditional(floors=floors, elevators=elevators, people=peepQ, elevCapacity=elevCapacity)
 	elif "dest" in build:
 		myTestBuilding = Building_destination(floors=floors, elevators=elevators, people=peepQ, elevCapacity=elevCapacity)
 	myTestBuilding.run(verbose=verbose, speed=speed, gif = gif)
 	
-	tot_avg += myTestBuilding.calcAvg()
-	tot_lobby += myTestBuilding.calcLobbyShare()
-	tot_elevUtil += myTestBuilding.calcAvgElevUtil()
-	tot_runtime += myTestBuilding.calcAvgRuntime()
-	sys.stdout.write("%d/%d  \r"%(x, reps))
+	tot_avg += myTestBuilding.calcAvg() / reps
+	tot_lobby += myTestBuilding.calcLobbyShare() / reps
+	tot_elevUtil += myTestBuilding.calcAvgElevUtil() / reps
+	tot_runtime += myTestBuilding.calcAvgRuntime() / reps
+	# sys.stdout.write("%d/%d  \r"%(x, reps))
 
 
-print("Average waiting time: %2.1f%% lobby, %d avg/trip"%(tot_lobby / reps, tot_avg / reps))
-print("Elevator Utilization: %2.1f%%"%(tot_elevUtil/reps))
-print("Alg Avg Runtime: %f"%(tot_runtime/reps))
+print("Average waiting time: %2.1f%% lobby, %5.1f avg/trip"%(tot_lobby, tot_avg))
+print("Elevator Utilization: %2.1f%%"%(tot_elevUtil))
+print("Alg Avg Runtime: %f"%(tot_runtime))

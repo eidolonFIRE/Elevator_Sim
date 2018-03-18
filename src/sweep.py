@@ -49,7 +49,7 @@ for idx, txt in enumerate(sys.argv):
 
 
 
-def run(floors):
+def worker(floors):
 	global elevators
 	global peeps 
 	global elevCapacity
@@ -57,7 +57,10 @@ def run(floors):
 	global build
 
 
-	flrData = [0]*elevators
+	flrData_avg      = [0] * elevators
+	flrData_lobby    = [0] * elevators
+	flrData_elevUtil = [0] * elevators
+
 	ppsAdj = peeps * floors
 	for r in range(reps):
 		peepsQ = peep.buildQueue({"A": ppsAdj//2, "B": ppsAdj-(ppsAdj//2)}, floors)
@@ -67,8 +70,11 @@ def run(floors):
 			elif "dest" in build:
 				myTestBuilding = Building_destination(floors=floors, elevators=elevs, people=copy.deepcopy(peepsQ), elevCapacity=elevCapacity)
 			myTestBuilding.run(verbose = False)
-			flrData[elevs-1] += myTestBuilding.calcAvg() / elevs
-	return map(lambda x: x/reps, flrData)
+			flrData_avg[elevs-1]      += myTestBuilding.calcAvg() / reps
+			flrData_lobby[elevs-1]    += myTestBuilding.calcLobbyShare() / reps
+			flrData_elevUtil[elevs-1] += myTestBuilding.calcAvgElevUtil() / reps
+
+	return (flrData_avg, flrData_lobby, flrData_elevUtil) 
 	
 	 
 
@@ -78,7 +84,7 @@ def run(floors):
 
 start = time()
 p = Pool()
-data = p.map(run, range(2, floors+1))
+data = p.map(worker, range(2, floors+1))
 end = time()
 
 
@@ -86,8 +92,20 @@ end = time()
 
 # print results
 
+print("\n=== Average Trip Time ===")
 print "floors, " + ",".join(["%delevs"%x for x in range(1,elevators+1)])
 for flr, d in enumerate(data):
-	print "%2d, "%(flr+2) + ",".join(["%6.2f"%x for x in d])
+	print "%2d, "%(flr+2) + ",".join(["%6.2f"%x for x in d[0]])
+
+print("\n=== Average Lobby Time ===")
+print "floors, " + ",".join(["%delevs"%x for x in range(1,elevators+1)])
+for flr, d in enumerate(data):
+	print "%2d, "%(flr+2) + ",".join(["%6.2f"%x for x in d[1]])
+
+# print("\n=== Average Elevator Utilization ===")
+# print "floors, " + ",".join(["%delevs"%x for x in range(1,elevators+1)])
+# for flr, d in enumerate(data):
+# 	print "%2d, "%(flr+2) + ",".join(["%6.2f"%x for x in d[2]])
+
 
 print("Elapsed time  %d:%d  "%((end-start)/60,(end-start)%60))
